@@ -49,7 +49,7 @@ jobs:
             shacmd: 'sha512sum'
           - os: macosx
             runner: macos-latest
-            os-cmake-args: '-DCMAKE_CXX_FLAGS="-static-libgcc -static-libstdc++ -flto" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 ${POSIX_CMAKE_ARGS}'
+            os-cmake-args: '-DCMAKE_CXX_FLAGS="-static-libgcc -static-libstdc++ -flto" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCLANGD_BUILD_XPC=OFF ${POSIX_CMAKE_ARGS}'
             build-args: '-j$(sysctl -n hw.ncpu)'
             bindir: '/build/bin'
             dotexe: ''
@@ -141,15 +141,22 @@ jobs:
       run: cmake -S ${{ matrix.release }}/llvm -B ${{ matrix.release }}/build ${{ env.COMMON_CMAKE_ARGS }} ${{ matrix.os-cmake-args }} ${{ matrix.extra-cmake-args }}
     - name: build
       run: cmake --build ${{ matrix.release }}/build ${{ matrix.build-args }} --target clang-format clang-query clang-tidy
+    - name: build clangd
+      if: ${{ matrix.clang-version >= 5 }}
+      run: cmake --build ${{ matrix.release }}/build ${{ matrix.build-args }} --target clangd
     - name: print dependencies
       if: ${{ matrix.os == 'macosx' }}
       run: otool -L ${{ matrix.release }}/build/bin/clang-format
     - name: rename output binary
+      shell: bash
       run: |
         cd ${{ matrix.release }}${{ matrix.bindir }}
         mv clang-format${{ matrix.dotexe }} clang-format-${{ env.suffix }}${{ matrix.dotexe }}
         mv clang-query${{ matrix.dotexe }} clang-query-${{ env.suffix }}${{ matrix.dotexe }}
         mv clang-tidy${{ matrix.dotexe }} clang-tidy-${{ env.suffix }}${{ matrix.dotexe }}
+        if [ -f clangd ]; then
+          mv clangd${{ matrix.dotexe }} clangd-${{ env.suffix }}${{ matrix.dotexe }}
+        fi
     - name: create and print sha512sum
       shell: bash
       run: |
@@ -157,10 +164,16 @@ jobs:
         ${{ matrix.shacmd }} clang-format-${{ env.suffix }} > clang-format-${{ env.suffix }}.sha512sum
         ${{ matrix.shacmd }} clang-query-${{ env.suffix }} > clang-query-${{ env.suffix }}.sha512sum
         ${{ matrix.shacmd }} clang-tidy-${{ env.suffix }} > clang-tidy-${{ env.suffix }}.sha512sum
+        if [ -f clangd-${{ env.suffix }}${{ matrix.dotexe }} ]; then
+          ${{ matrix.shacmd }} clangd-${{ env.suffix }} > clangd-${{ env.suffix }}.sha512sum
+        fi
         echo "Checksums are: "
         cat clang-format-${{ env.suffix }}.sha512sum
         cat clang-query-${{ env.suffix }}.sha512sum
         cat clang-tidy-${{ env.suffix }}.sha512sum
+        if [ -f clangd-${{ env.suffix }}${{ matrix.dotexe }} ]; then
+          cat clangd-${{ env.suffix }}.sha512sum
+        fi
     - name: upload artifacts
       uses: actions/upload-artifact@v2
       with:
